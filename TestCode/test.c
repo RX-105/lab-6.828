@@ -31,5 +31,6 @@ main (void)
     printf("%d\n", a);
     printf("%d\n", 0x002000 | 0x001 | 0x002);
     register int b = 0xFFFFFFFF;
-    printf("%d", b);
+    printf("%d\n", b);
+    printf("%d\n", -1*10+1);
 }
