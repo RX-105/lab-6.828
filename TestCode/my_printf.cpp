@@ -1,14 +1,20 @@
 #include <cstdarg>
 #include <iostream>
+#include <cstdio>
 using namespace ::std;
 
 int cprintf(const char *fmt, ...);
+void trans(int num, int base, int offset, char *result);
+void dec2oct(int num, char *result);
 
 int main(void)
 {
     int num = 42;
     char str[] = "String";
-    cprintf("%d,%s", num, str);
+    cprintf("%o,%s", num, str);
+    char *str2 = (char *)malloc(sizeof(char));
+    dec2oct(10, str2);
+    printf("%s", str2);
 }
 
 int cprintf(const char *fmt, ...)
@@ -45,6 +51,12 @@ int cprintf(const char *fmt, ...)
                 cout << str;
                 break;
             }
+            case 'o':
+            {
+                char *value = (char *)malloc(sizeof(char));
+                dec2oct(va_arg(args, int), value);
+                cout << value;
+            }
             }
         }
         else
@@ -55,4 +67,48 @@ int cprintf(const char *fmt, ...)
     cout << endl;
     va_end(args);
     return cnt;
+}
+
+void trans(int num, int base, int offset, char *result)
+{
+    if (num == 0)
+    {
+        *result = '\0';
+        return;
+    }
+    char serials[] = {
+        '0',
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+        'A',
+        'B',
+        'C',
+        'D',
+        'E',
+        'F'};
+    char buffer[32];
+    int position = sizeof(buffer) / sizeof(char);
+    while (num != 0)
+    {
+        int temp = num & base;
+        buffer[--position] = serials[temp];
+        num = num >> offset;
+    }
+    for (int i = position; i < sizeof(buffer) / sizeof(char); i++)
+    {
+        *(result++) = buffer[i];
+    }
+    return;
+}
+
+void dec2oct(int num, char *result)
+{
+    trans(num, 7, 3, result);
 }
