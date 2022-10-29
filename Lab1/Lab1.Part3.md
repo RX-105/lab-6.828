@@ -76,3 +76,32 @@ We have omitted a small fragment of code - the code necessary to print octal num
 ```
 
 这部分代码和前面的`%d`和`%u`相似，区别在于`base`从10变成了8。
+
+# Exercise 9
+
+## 描述
+
+Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?
+
+内核把自己的栈初始化到了哪里？它在内存中的位置具体是何处？内核是怎么预留自己的栈空间的？在这段预留空间尾部中，栈指针初始化时指向了哪里？
+
+## 解答
+
+程序栈和`ebp`、`esp`两个寄存器相关，这两个寄存器时在`entry.s`里面完成初始化的。具体为下面两行：
+
+```s
+movl    $0x0,%ebp            # nuke frame pointer
+movl    $(bootstacktop),%esp
+```
+
+`ebp`初始化为`0x0`，而`esp`为`bootstacktop`的值。`bootstacktop`是在`entry.s`尾部数据部分里面`bootstack`部分定义的。由`bootstack`的`.space`可以得知栈的大小为KSTKSIZE = 8 * PGSIZE = 8 * 4096 = 0x8000。
+
+`bootstacktop`的值在源代码中无法得知，但通过GDB可以查看到`esp`的值为`0xf0110000`。至此，可以确定内核的栈空间范围是F010 8000 ~ 0xF011 0000。
+```
+(gdb) si
+=> 0xf0100039 <relocated+10>:   call   0xf0100094 <i386_init>
+80              call    i386_init
+(gdb) x/x $esp
+0xf0110000 <entry_pgdir>:       0x00111021
+```
+
