@@ -21,4 +21,6 @@ main (void)
     char *str = (char *)malloc(sizeof(char));
     *str = 'c';
     printf("%s", str);
+     char *p = (char *)0x100000;
+    p = "Hello world";
 }
