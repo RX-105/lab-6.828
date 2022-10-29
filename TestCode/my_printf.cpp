@@ -1,11 +1,14 @@
 #include <cstdarg>
 #include <iostream>
 #include <cstdio>
+#include <cstring>
 using namespace ::std;
 
 int cprintf(const char *fmt, ...);
 void trans(int num, int base, int offset, char *result);
 void dec2oct(int num, char *result);
+int pow(int base, int p);
+int stoi(char *c);
 
 int main(void)
 {
@@ -14,7 +17,9 @@ int main(void)
     cprintf("%o,%s", num, str);
     char *str2 = (char *)malloc(sizeof(char));
     dec2oct(10, str2);
-    printf("%s", str2);
+    cprintf("%s", str2);
+    char str3[] = "321";
+    cprintf("%o", stoi(str3));
 }
 
 int cprintf(const char *fmt, ...)
@@ -111,4 +116,28 @@ void trans(int num, int base, int offset, char *result)
 void dec2oct(int num, char *result)
 {
     trans(num, 7, 3, result);
+}
+
+int pow(int base, int p)
+{
+    int i, result = 1;
+    for (i = 1; i < p; i++)
+    {
+        result *= base;
+    }
+    return result;
+}
+
+int stoi(char *c)
+{
+    int i, result = 0;
+    for (i = 0; i < strlen(c); i++)
+    {
+        if (c[i] < '0' || c[i] > '9')
+        {
+            return 0;
+        }
+        result += (c[i] - '0') * pow(10, strlen(c) - i);
+    }
+    return result;
 }
