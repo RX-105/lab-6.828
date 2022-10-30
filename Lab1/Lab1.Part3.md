@@ -97,6 +97,7 @@ movl    $(bootstacktop),%esp
 `ebp`初始化为`0x0`，而`esp`为`bootstacktop`的值。`bootstacktop`是在`entry.s`尾部数据部分里面`bootstack`部分定义的。由`bootstack`的`.space`可以得知栈的大小为KSTKSIZE = 8 * PGSIZE = 8 * 4096 = 0x8000。
 
 `bootstacktop`的值在源代码中无法得知，但通过GDB可以查看到`esp`的值为`0xf0110000`。至此，可以确定内核的栈空间范围是F010 8000 ~ 0xF011 0000。
+
 ```
 (gdb) si
 => 0xf0100039 <relocated+10>:   call   0xf0100094 <i386_init>
@@ -105,3 +106,44 @@ movl    $(bootstacktop),%esp
 0xf0110000 <entry_pgdir>:       0x00111021
 ```
 
+至于内核为自己预留栈空间的方式，是`entry.s`中通过声明`bootstack`的`.space`来设置的32KiB空间。
+
+栈指针指向的是栈顶，也就是`0xf0110000`。
+
+esp和ebp两个寄存器是C语言编译的代码需要的寄存器。esp是x86栈指针(x86 Stack Pointer)，它总是指向栈的顶端。当新的数据入栈之后，esp的地址减少；当有数据出栈后，esp的地址增加。在32位机器上，增减量总是4的倍数。许多x86指令都要使用esp，如call。ebp是x86基指针(x86 Base Pointer)，它指向的是当前运行函数的地址。
+
+C语言采用了函数式编程风格，因此和ebp、esp两个寄存器产生了关系。当调用一个函数时，先把所有的参数推入栈，然后把调用函数返回地址推入栈，转向调用函数地址，把当前函数基地址推入栈，再把栈顶指向基地址。C语言下的数据操作或多或少和栈相关，因此这里在进入i386_init()之前需要准备好栈环境。
+
+# Exercise 10
+
+```
+(gdb) x/x $ebp
+0xf010ffc8:     0xf010fff8
+(gdb) x/x $esp
+0xf010ffb8:     0x00000000
+
+(gdb) x/x $ebp
+0xf010ffa8:     0xf010ffc8
+(gdb) x/x $esp
+0xf010ff98:     0x00000000
+
+(gdb) x/x $ebp
+0xf010ff88:     0xf010ffa8
+(gdb) x/x $esp
+0xf010ff78:     0xf010ffa8
+
+(gdb) x/x $ebp
+0xf010ff68:     0xf010ff88
+(gdb) x/x $esp
+0xf010ff58:     0xf010ff88
+
+(gdb) x/x $ebp
+0xf010ff48:     0xf010ff68
+(gdb) x/x $esp
+0xf010ff38:     0xf010ff68
+
+(gdb) x/x $ebp
+0xf010ff28:     0xf010ff48
+(gdb) x/x $esp
+0xf010ff18:     0xf010ff48
+```
