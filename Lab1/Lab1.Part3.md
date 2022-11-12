@@ -116,7 +116,33 @@ C语言采用了函数式编程风格，因此和ebp、esp两个寄存器产生�
 
 # Exercise 10
 
+# 描述
+
+To become familiar with the C calling conventions on the x86, find the address of the test_backtrace function in obj/kern/kernel.asm, set a breakpoint there, and examine what happens each time it gets called after the kernel starts. How many 32-bit words does each recursive nesting level of test_backtrace push on the stack, and what are those words?
+
+Note that, for this exercise to work properly, you should be using the patched version of QEMU available on the tools page or on Athena. Otherwise, you'll have to manually translate all breakpoint and memory addresses to linear addresses.
+
+为了熟悉x86上C语言的调用机制，请在`obj/kern/kernel.asm`中找到`test_backtrace()`的地址，并在这里设置断点，观察内核调用它的时候发生了什么。每一级的`test_backtrace()`往栈上推了多少个32位字？这些字内容是什么？
+
+## 解答
+
+通过阅读`obj/kern/kernel.asm`可以发现，`test_backtrace()`位于0xf0100040。
+
+每次调用都会往栈上推入20个32位字。这20字节保存的是程序实参值、局部变量等等，比如这里查看ebx的值为0x5，也就是`i386_init()`里面传来的参数。
+
+根据GDB的输出信息来看，在第一次调用`test_backtrace()`的时候，ebp为空，esp为0xf0100100，这个地址是`i386_init()`调用`test_backtrace()`的位置，因此也就是函数的返回地址。至于ebp和esp指向的位置，根据上一个练习知道了内核的栈顶为0xF011 0000，向下扩展，0xf010fff8就是栈指针当前位置，0xf010ffcc就是当前函数的栈顶。
+
+至于20字节空间大小的来源，来自地址0xf0100044的指令`sub  $0xc,%esp`，因此esp向下12字节空间。（不对啊，这里是0xc=12，哪儿来的20字节？？？）
+
+`test_backtrace(4)`中，ebp的值设为了上次调用的ebp，而其位置则是继续向下开辟栈空间。`mov %esp, %ebp`指令把esp的值拷贝给ebp，也就相等了。
+
+
 ```
+(gdb) x/x $ebp
+0xf010fff8:     0x00000000
+(gdb) x/x $esp
+0xf010ffcc:     0xf0100100
+
 (gdb) x/x $ebp
 0xf010ffc8:     0xf010fff8
 (gdb) x/x $esp
@@ -146,4 +172,58 @@ C语言采用了函数式编程风格，因此和ebp、esp两个寄存器产生�
 0xf010ff28:     0xf010ff48
 (gdb) x/x $esp
 0xf010ff18:     0xf010ff48
+```
+
+# Exercise 11
+
+## 描述
+
+Implement the backtrace function as specified above. Use the same format as in the example, since otherwise the grading script will be confused. When you think you have it working right, run make grade to see if its output conforms to what our grading script expects, and fix it if it doesn't. After you have handed in your Lab 1 code, you are welcome to change the output format of the backtrace function any way you like.
+
+If you use read_ebp(), note that GCC may generate "optimized" code that calls read_ebp() before mon_backtrace()'s function prologue, which results in an incomplete stack trace (the stack frame of the most recent function call is missing). While we have tried to disable optimizations that cause this reordering, you may want to examine the assembly of mon_backtrace() and make sure the call to read_ebp() is happening after the function prologue.
+
+完成`backtrace()`函数，实现上述的功能。格式要和上述输出一致（这是课程提交的格式需求，和我没关系）。
+
+如果你使用了read_ebp()，GCC可能对代码进行优化，也就是在mon_backtrace()的栈初始化（也就是函数前言，function prologue）之前就调用read_ebp()，这可能导致stack trace输出不完整（最近几次函数调用的栈帧丢失）。如果你关掉了代码优化，你可以检查一下汇编代码，确认调用顺序。
+
+> 注：上述功能指的就是打印backtrace，输出内容包括ebp、eip和args。
+
+## 解答
+
+x86头文件里提供了read_ebp()函数，通过内联汇编代码的方式获取到ebp栈基址寄存器的内容。
+
+在实验指导中有提到，eip即x86下的指令指针，它通常指向call指令后下一条指令的地址（The return instruction pointer typically points to the instruction after the call instruction），参考下面的例子：
+
+```
+(gdb) x/x $ebp
+0xf010ffc8:     0xf010fff8
+(gdb) x/x $ebp+4
+0xf010ffcc:     0xf0100100
+```
+
+有一点值得注意的是，实验指导里提到的eip和GDB中获取的eip含义上存在出入。前者的含义刚刚提到过，而GDB中的eip指向的是下一条要执行的命令的地址。因此，为了获取实验中的eip，实际上要获取ebp+4。此外，实验指导还提醒过，(int)p + 1和(int)(p + 1)是完全不同的，在这里，栈内每个元素占4个字节，所以要加4。
+
+这段输出内容取自第一次调用`test_backtrace()`并结束函数前言后得到的输出。在输出内容中可以看到，eip指向0xf0100100。通过阅读反编译代码可以看到，0xf0100100地址的上一条指令为0xf01000fb，内容正是调用`test_backtrace()`的指令。至于这么做的原因，我认为是为了被调用函数执行完成之后能够找到返回之后的执行地址。
+
+从ebp开始，栈内先是返回地址，然后就是传递的参数了。基于此，就可以编写函数了。实现完成的代码如下
+
+```c
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+	// Your code here.
+	cprintf("Stack backtrace:\n");
+	uint32_t* ebp = (uint32_t*)read_ebp();
+	while (ebp)
+	{
+        // ebp[1]等价于*(ebp+1)，或者是*ebp+4
+		cprintf("ebp=%08x, ", ebp[0]);
+		cprintf("eip=%08x, ", ebp[1]);
+		cprintf("args=%08x %08x %08x %08x %08x\n",
+				ebp[2], ebp[3], ebp[4], ebp[5], ebp[6]);
+		ebp = (uint32_t*) *ebp;
+	}
+	
+	return 0;
+}
 ```
