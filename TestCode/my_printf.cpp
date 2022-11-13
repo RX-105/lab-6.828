@@ -12,14 +12,15 @@ int stoi(char *c);
 
 int main(void)
 {
-    int num = 42;
-    char str[] = "String";
-    cprintf("%o,%s", num, str);
-    char *str2 = (char *)malloc(sizeof(char));
-    dec2oct(10, str2);
-    cprintf("%s", str2);
-    char str3[] = "321";
-    cprintf("%o", stoi(str3));
+    // int num = 42;
+    // char str[] = "String";
+    // cprintf("%o,%s", num, str);
+    // char *str2 = (char *)malloc(sizeof(char));
+    // dec2oct(10, str2);
+    // cprintf("%s", str2);
+    // char str3[] = "321";
+    // cprintf("%o", stoi(str3));
+    cprintf("%d", 0xf0100b21-0xf0100b04);
 }
 
 int cprintf(const char *fmt, ...)
