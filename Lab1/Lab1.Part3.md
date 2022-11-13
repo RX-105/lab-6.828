@@ -292,3 +292,112 @@ f0100b14:	e8 8e 02 00 00       	call   f0100da7 <cprintf>
 f0100b19:	83 c4 10             	add    $0x10,%esp
 	uint32_t* ebp = (uint32_t*)read_ebp();
 ```
+
+# Exercise 12
+
+## 描述
+
+Modify your stack backtrace function to display, for each `eip`, the function name, source file name, and line number corresponding to that `eip`.
+
+In `debuginfo_eip`, where do `__STAB_*` come from? This question has a long answer; to help you to discover the answer, here are some things you might want to do:
+
+- look in the file `kern/kernel.ld` for `__STAB_*`
+- run `objdump -h obj/kern/kernel`
+- run `objdump -G obj/kern/kernel`
+- run `gcc -pipe -nostdinc -O2 -fno-builtin -I. -MD -Wall -Wno-format -DJOS_KERNEL -gstabs -c -S kern/init.c`, and look at init.s.
+- see if the bootloader loads the symbol table in memory as part of loading the kernel binary
+
+Complete the implementation of `debuginfo_eip` by inserting the call to `stab_binsearch` to find the line number for an address.
+
+Add a `backtrace` command to the kernel monitor, and extend your implementation of `mon_backtrace` to call `debuginfo_eip` and print a line for each stack frame of the form:
+
+```
+K> backtrace
+Stack backtrace:
+  ebp f010ff78  eip f01008ae  args 00000001 f010ff8c 00000000 f0110580 00000000
+         kern/monitor.c:143: monitor+106
+  ebp f010ffd8  eip f0100193  args 00000000 00001aac 00000660 00000000 00000000
+         kern/init.c:49: i386_init+59
+  ebp f010fff8  eip f010003d  args 00000000 00000000 0000ffff 10cf9a00 0000ffff
+         kern/entry.S:70: <unknown>+0
+K> 
+```
+
+Each line gives the file name and line within that file of the stack frame's `eip`, followed by the name of the function and the offset of the `eip` from the first instruction of the function (e.g., `monitor+106` means the return `eip` is 106 bytes past the beginning of `monitor`).
+
+Be sure to print the file and function names on a separate line, to avoid confusing the grading script.
+
+Tip: printf format strings provide an easy, albeit obscure, way to print non-null-terminated strings like those in STABS tables. `printf("%.*s", length, string)` prints at most `length` characters of `string`. Take a look at the printf man page to find out why this works.
+
+You may find that some functions are missing from the backtrace. For example, you will probably see a call to `monitor()` but not to `runcmd()`. This is because the compiler in-lines some function calls. Other optimizations may cause you to see unexpected line numbers. If you get rid of the `-O2` from `GNUMakefile`, the backtraces may make more sense (but your kernel will run more slowly).
+
+修改你的backtrace函数，使其能够对于每一个eip，都能输出其对应的函数名、源代码文件名和代码行数。
+
+在`debuginfo_eip`中，`__STAB_*`是怎么来的？这个问题的答案内容会很多。为了帮助你找到答案，建议你完成下面的步骤：
+
+- 在`kern/kernel.ld`文件中寻找`__STAB_*`
+- 运行`objdump -h obj/kern/kernel`
+- 运行`objdump -G obj/kern/kernel`
+- 运行`gcc -pipe -nostdinc -O2 -fno-builtin -I. -MD -Wall -Wno-format -DJOS_KERNEL -gstabs -c -S kern/init.c`，然后找到init.s
+- 确认bootloader是否把符号表作为内核二进制文件的一部分加载到内存里去了
+
+为了实现`debuginfo_eip`，调用`stab_binsearch`来确认一个地址对应的行号。
+
+给内核命令行添加一个名为`backtrace`的命令，并扩展你的`mon_backtrace`，让其能够调用`debug_info`，然后像下面的输出一样打印每一个栈帧的信息。
+
+```
+K> backtrace
+Stack backtrace:
+  ebp f010ff78  eip f01008ae  args 00000001 f010ff8c 00000000 f0110580 00000000
+         kern/monitor.c:143: monitor+106
+  ebp f010ffd8  eip f0100193  args 00000000 00001aac 00000660 00000000 00000000
+         kern/init.c:49: i386_init+59
+  ebp f010fff8  eip f010003d  args 00000000 00000000 0000ffff 10cf9a00 0000ffff
+         kern/entry.S:70: <unknown>+0
+K> 
+```
+
+每一行输出每个eip指向的源代码文件名、文件内行号、函数名和eip距离函数首个指令的偏移（比如，`monitor+106`指的是`eip`距离`monitor`的开始有106字节距离）。
+
+> 小提示：尽管晦涩难懂，printf格式化输出用来输出非空结束的字符串，不失为一种简单的方式，比如STABS表中的字符串。`printf("%.*s", length, string)`输出最多`length`长度的`string`。参阅printf的man page，了解一下为什么可以这样。
+
+你可能会发现backtrace里面少了某些函数。举个例子，你可能会发现调用`monitor()`，而不是`runcmd()`。这是因为编译器内联了某些函数调用。另外的某些代码优化可能让你看到奇怪的行号。如果你在`GNUMakefile`里面去掉`-O2`参数，backtrace可能会变得正常些（不过你的内核运行速度也会下降）。
+
+## 解答
+
+*先在这里放好成品，讲解后面再写*
+
+> file kern/kdebug.c
+```c
+	stab_binsearch(stabs, &lline, &rline, N_SLINE, addr);
+	if (lline <= rline)
+	{
+		info->eip_line = stabs[lline].n_desc;
+	}
+```
+> file kern/monitor.c
+```c
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+	// Your code here.
+	cprintf("Stack backtrace:\n");
+	uint32_t *ebp = (uint32_t *)read_ebp();
+	struct Eipdebuginfo info;
+	while (ebp)
+	{
+		cprintf("ebp=%08x, ", ebp[0]);
+		cprintf("eip=%08x, ", ebp[1]);
+		cprintf("args=%08x %08x %08x %08x %08x\n",
+				ebp[2], ebp[3], ebp[4], ebp[5], ebp[6]);
+
+		debuginfo_eip((uint32_t)ebp[1], &info);
+		cprintf("\t%s:%d, in function:%.*s(), offset=%d\n",
+				info.eip_file, info.eip_line, 
+				info.eip_fn_namelen, info.eip_fn_name, 
+				(uintptr_t)ebp[1]-info.eip_fn_addr);
+		ebp = (uint32_t *)*ebp;
+	}
+	return 0;
+}
+```
