@@ -365,7 +365,68 @@ K>
 
 ## 解答
 
-*先在这里放好成品，讲解后面再写*
+题目的要求是在上一次的练习的基础上实现输出更多调试信息的能力。为此，需要用到debuginfo_eip()函数。
+
+debuginfo_eip()函数的主要功能实在STABS里搜索给定参数地址对应的符号，如源代码文件名、文件内行数、函数名、偏移等等。首先需要知道，`__STAB_*`开头的那些变量是怎么来的。
+
+STABS是一种用于调试信息的格式，它包含了调试器可以识别的调试信息。运行`objdump -h obj/kern/kernel`可以看到，多了两个stab节和stabstr节，这里面就包含了STABS。
+
+```
+obj/kern/kernel：     文件格式 elf32-i386
+
+节：
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00002191  f0100000  00100000  00001000  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .rodata       00000563  f0102194  00102194  00003194  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .stab         000041e9  f01026f8  001026f8  000036f8  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .stabstr      00001a1c  f01068e1  001068e1  000078e1  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .data         0000a528  f0109000  00109000  0000a000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  5 .bss          00000648  f0113540  00113540  00014540  2**5
+                  CONTENTS, ALLOC, LOAD, DATA
+  6 .comment      00000035  00000000  00000000  00014b88  2**0
+                  CONTENTS, READONLY
+```
+
+运行`objdump -G obj/kern/kernel`可以查看STABS的具体内容，这里只显示部分。这些信息和Stab结构体的内容是对的上的。
+
+```
+obj/kern/kernel：     文件格式 elf32-i386
+
+.stab 节的内容：
+
+Symnum n_type n_othr n_desc n_value  n_strx String
+
+-1     HdrSym 0      1405   00001a1b 1
+0      SO     0      0      f0100000 1      {standard input}
+1      SOL    0      0      f010000c 18     kern/entry.S
+2      SLINE  0      44     f010000c 0
+```
+
+因此，获取源代码文件名等信息的方法就是搜索STABS了。查看`kern/kdebug.c`只看到了定义，没看到赋值。那这个表的内容是怎么来的呢？
+
+对于内核文件，`kern/kernel.ld`指定了链接时的空间分配，其中就指明了要求链接器分配STABS的空间。运行`gcc -pipe -nostdinc -O2 -fno-builtin -I. -MD -Wall -Wno-format -DJOS_KERNEL -gstabs -c -S kern/init.c`得到的init.s里面发现，是编译器生成的STABS内容。
+
+接下来使用GDB确认STABS的位置。把断点设置在`debuginfo_eip()`的开头，然后使用`info variables`命令查看所有变量。可以看到，`__STAB_*`开头的变量所处的位置。根据内核二进制文件大小来判断，内核文件在内存空间的位置是`0xf0100000~0xf0115858`，因此，STABS是作为二进制文件的一部分加载到了内存空间。
+
+```
+Non-debugging symbols:
+0xf01026f8  __STAB_BEGIN__
+0xf01068e0  __STAB_END__
+0xf01068e1  __STABSTR_BEGIN__
+0xf01082fc  __STABSTR_END__
+0xf0109000  bootstack
+0xf0111000  bootstacktop
+0xf0113540  edata
+0xf0113768  shift
+0xf0113b80  end
+```
+
+知道了这些，就可以完成`debuginfo_eip()`的未完成部分了。下面是我的实现：
 
 > file kern/kdebug.c
 ```c
@@ -400,4 +461,18 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	}
 	return 0;
 }
+```
+
+`debuginfo_eip()`的主要步骤是通过二分搜索法搜索指定信息。二分搜索法由同文件的`stab_binsearch()`实现，它接受参数为：stabs表、搜索左区间、搜索右区间、搜索信息、搜索地址，如果搜索成功，则把左右区间缩小，否则左区间大于右区间。搜索范围从大到小依次为文件名、函数名和行号，因此要按照这个顺序搜索。未完成的部分是行号搜索，参考前面的代码，就可以完成这个部分。
+
+回到`mon_backtrace()`，使用之前的`debuginfo_eip()`把eip对应的调试信息写到`Eipdebuginfo`结构体里面，然后再输出到控制台上。
+
+完成`mon_backtrace()`之后，就可以设置控制台命令了。在`kern/monitor.c`的commands结构体数组中添加一条新的数据就可以了，如下所示。
+
+```c
+static struct Command commands[] = {
+	{ "help", "Display this list of commands", mon_help },
+	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display backtrace of current stack.", mon_backtrace},
+};
 ```
